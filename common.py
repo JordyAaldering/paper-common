@@ -55,7 +55,7 @@ def tikz_fix_overlapping_x_ticks(s: str) -> str:
 
 def tikz_sanitize_labels(s: str) -> str:
     '''
-    Sanitize references in `\label` and `\addlegendimage` by replacing invalid characters.
+    Sanitize references in `label` and `addlegendimage` by replacing invalid characters.
     '''
     label_re = re.compile(r'\\label\{([^}]*)\}')
     legend_re = re.compile(r'(\\addlegendimage\{[^=]+=)([^}]*)\}')

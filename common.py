@@ -94,13 +94,9 @@ def fix_twin_axis_layout(
 
         # First axis
         if count == 1:
-            padding_em = compute_right_padding_em(
-                right_y_labels,
-                tick_length_pt,
-                inner_sep_pt
-            )
+            right_padding_em = compute_padding_em(right_y_labels, tick_length_pt, inner_sep_pt)
 
-            effective_width = f"{{{axis_width} - {padding_em:.2f}em}}"
+            effective_width = f"{{{axis_width} - {right_padding_em:.2f}em}}"
 
             if WIDTH_RE.search(opts):
                 opts = WIDTH_RE.sub(f'width={effective_width}', opts)
@@ -118,11 +114,11 @@ def fix_twin_axis_layout(
         else:
             injection = (
                 f'at={{({main_name}.south west)}},'
-                f'anchor=south west,'
-                f'overlay,'
-                f'axis x line=none,'
-                f'xtick=\empty,'
-                f'xticklabels=\empty,'
+                'anchor=south west,'
+                'overlay,'
+                'axis x line=none,'
+                'xtick=\\empty,'
+                'xticklabels=\\empty,'
             )
 
             # Remove accidental scaling

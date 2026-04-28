@@ -50,7 +50,8 @@ def tikz_fix_overlapping_x_ticks(s: str) -> str:
         opts = xlabels_re.sub('xticklabels={}', opts)
         return begin + opts
 
-    return AXIS_BEGIN.sub(repl, s)
+    axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
+    return axis_begin_re.sub(repl, s)
 
 def tikz_sanitize_labels(s: str) -> str:
     '''

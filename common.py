@@ -17,7 +17,7 @@ class Colors(Enum):
     TETRADIC_2 = '#A63AA0'
     TETRADIC_3 = '#A6763A'
 
-def as_tikz(fig, ax, ax2=None, axis_width: str = r'\linewidth', axis_height: str = r'.8\linewidth', **kwargs) -> str:
+def as_tikz(fig, ax, ax2=None, axis_width: str = r'\\linewidth', axis_height: str = r'.8\\linewidth', **kwargs) -> str:
     # https://github.com/ErwindeGelder/matplot2tikz/blob/main/src/matplot2tikz/_save.py#L68
     s = matplot2tikz.get_tikz_code(fig,
             axis_width=axis_width,

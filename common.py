@@ -42,7 +42,7 @@ def tikz_sanitize_labels(s: str) -> str:
     label_re = re.compile(r'\\label\{([^}]*)\}')
     legend_re = re.compile(r'(\\addlegendimage\{.*?/pgfplots/refstyle=)([^,}]+)', re.DOTALL)
     s = label_re.sub(lambda m: f"\\label{{{sanitize(m.group(1))}}}", s)
-    s = legend_re.sub(lambda m: f"{m.group(1)}{sanitize(m.group(2))}}}", s)
+    s = legend_re.sub(lambda m: f"{m.group(1)}{sanitize(m.group(2))}", s)
     return s
 
 def sanitize(s: str) -> str:

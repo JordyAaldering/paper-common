@@ -98,8 +98,9 @@ def fix_twin_axis_layout(
 
             effective_width = f"{{{axis_width} - {right_padding_em:.2f}em}}"
 
-            if WIDTH_RE.search(opts):
-                opts = WIDTH_RE.sub(f'width={effective_width}', opts)
+            width_re = re.compile(r'width\s*=\s*([^,\]]+)')
+            if width_re.search(opts):
+                opts = width_re.sub(f'width={effective_width}', opts)
             else:
                 opts = opts.replace('[', f'[width={effective_width},', 1)
 

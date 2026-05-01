@@ -17,7 +17,7 @@ class Colors(Enum):
     TETRADIC_2 = '#A63AA0'
     TETRADIC_3 = '#A6763A'
 
-def as_tikz(fig, ax, ax2=None, axis_width: str = r'\\linewidth', axis_height: str = r'.8\\linewidth', **kwargs) -> str:
+def as_tikz(fig, ax, ax2=None, axis_width: str = r'\linewidth', axis_height: str = r'.8\linewidth', **kwargs) -> str:
     # https://github.com/ErwindeGelder/matplot2tikz/blob/main/src/matplot2tikz/_save.py#L68
     s = matplot2tikz.get_tikz_code(fig,
             axis_width=axis_width,
@@ -100,7 +100,8 @@ def fix_twin_axis_layout(
 
             width_re = re.compile(r'width\s*=\s*([^,\]]+)')
             if width_re.search(opts):
-                opts = width_re.sub(f'width={effective_width}', opts)
+                # Use a callable replacement so backslashes in TikZ lengths are treated literally.
+                opts = width_re.sub(lambda _: f'width={effective_width}', opts)
             else:
                 opts = opts.replace('[', f'[width={effective_width},', 1)
 

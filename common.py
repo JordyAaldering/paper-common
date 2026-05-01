@@ -1,4 +1,5 @@
 from enum import Enum
+from pathlib import Path
 import matplot2tikz
 import re
 
@@ -28,33 +29,38 @@ def as_tikz(fig, ax, ax2=None,
     fig.canvas.draw()
 
     # https://github.com/ErwindeGelder/matplot2tikz/blob/main/src/matplot2tikz/_save.py#L68
-    s = matplot2tikz.get_tikz_code(fig,
+    code = matplot2tikz.get_tikz_code(fig,
             axis_width=axis_width,
             axis_height=axis_height,
             include_disclaimer=False,
             **kwargs)
 
-    s = tikz_sanitize_labels(s)
+    code = tikz_sanitize_labels(code)
     if y_labels_to_top:
-        s = tikz_move_ylabels_to_top(s)
+        code = tikz_move_ylabels_to_top(code)
     if ax2 is not None:
-        s = tikz_fix_overlapping_x_ticks(s)
+        code = tikz_fix_overlapping_x_ticks(code)
         right_y_labels = get_y_labels(ax2)
-        s = fix_twin_axis_layout(s, axis_width, right_y_labels)
-    return s
+        code = fix_twin_axis_layout(code, axis_width, right_y_labels)
+    return code
+
+def save_tikz(code: str, filepath: str):
+    filepath = Path(filepath)
+    with filepath.open('w') as f:
+        f.write(code)
 
 def get_y_labels(ax):
     return [t.get_text() for t in ax.get_yticklabels()]
 
-def tikz_sanitize_labels(s: str) -> str:
+def tikz_sanitize_labels(code: str) -> str:
     '''
     Sanitize references in `label` and `addlegendimage` by replacing invalid characters.
     '''
     label_re = re.compile(r'\\label\{([^}]*)\}')
     legend_re = re.compile(r'(\\addlegendimage\{.*?/pgfplots/refstyle=)([^,}]+)', re.DOTALL)
-    s = label_re.sub(lambda m: f"\\label{{{sanitize(m.group(1))}}}", s)
-    s = legend_re.sub(lambda m: f"{m.group(1)}{sanitize(m.group(2))}", s)
-    return s
+    code = label_re.sub(lambda m: f"\\label{{{sanitize(m.group(1))}}}", code)
+    code = legend_re.sub(lambda m: f"{m.group(1)}{sanitize(m.group(2))}", code)
+    return code
 
 def sanitize(s: str) -> str:
     '''
@@ -64,7 +70,7 @@ def sanitize(s: str) -> str:
     s = re.sub(r'_+', '_', s)  # Collapse multiple underscores
     return s.strip('_')  # Avoid leading/trailing underscores
 
-def tikz_move_ylabels_to_top(tikz: str) -> str:
+def tikz_move_ylabels_to_top(code: str) -> str:
     count = 0
 
     def repl(m):
@@ -91,9 +97,9 @@ def tikz_move_ylabels_to_top(tikz: str) -> str:
         return begin + opts
 
     axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
-    return axis_begin_re.sub(repl, tikz)
+    return axis_begin_re.sub(repl, code)
 
-def tikz_fix_overlapping_x_ticks(s: str) -> str:
+def tikz_fix_overlapping_x_ticks(code: str) -> str:
     '''
     With twin axis plots, `xtick` and `xticklabels` is being set for both axes, causing overlapping ticks.
     Replace ticks and labels of all but the first axis with empty ones to fix this issue.
@@ -115,10 +121,10 @@ def tikz_fix_overlapping_x_ticks(s: str) -> str:
         return begin + opts
 
     axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
-    return axis_begin_re.sub(repl, s)
+    return axis_begin_re.sub(repl, code)
 
 def fix_twin_axis_layout(
-    tikz: str,
+    code: str,
     axis_width: str,
     right_y_labels: list[str],
     tick_length_pt: float = 2.5,
@@ -243,7 +249,7 @@ def fix_twin_axis_layout(
         return begin + opts
 
     axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
-    return axis_begin_re.sub(repl, tikz)
+    return axis_begin_re.sub(repl, code)
 
 def compute_padding_em(
     labels: list[str],

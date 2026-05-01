@@ -22,6 +22,7 @@ def as_tikz(fig, ax, ax2=None,
             axis_width: str = r'\linewidth',
             axis_height: str = r'.8\linewidth',
             y_labels_to_top: bool = True,
+            y_axis_text_size: str = 'scriptsize',
             **kwargs
         ) -> str:
 
@@ -40,8 +41,19 @@ def as_tikz(fig, ax, ax2=None,
         code = tikz_move_ylabels_to_top(code)
     if ax2 is not None:
         code = tikz_fix_overlapping_x_ticks(code)
-        right_y_labels = get_y_labels(ax2)
-        code = fix_twin_axis_layout(code, axis_width, right_y_labels)
+        right_y_tick_labels = get_y_labels(ax2)
+        right_y_axis_label = ax2.get_ylabel()
+        y_axis_font_scale = latex_size_to_font_scale(y_axis_text_size)
+        code = fix_twin_axis_layout(
+            code,
+            axis_width,
+            right_y_tick_labels,
+            right_y_axis_label=right_y_axis_label,
+            y_labels_to_top=y_labels_to_top,
+            y_axis_font_scale=y_axis_font_scale,
+        )
+
+    code = tikz_apply_yaxis_text_size(code, y_axis_text_size)
     return code
 
 def save_tikz(code: str, filepath: str):
@@ -70,31 +82,176 @@ def sanitize(s: str) -> str:
     s = re.sub(r'_+', '_', s)  # Collapse multiple underscores
     return s.strip('_')  # Avoid leading/trailing underscores
 
-def tikz_move_ylabels_to_top(code: str) -> str:
-    count = 0
+def split_top_level_options(s: str) -> list[str]:
+    parts = []
+    chunk = []
+    brace_depth = 0
+    bracket_depth = 0
+    paren_depth = 0
+
+    for ch in s:
+        if ch == '{':
+            brace_depth += 1
+        elif ch == '}':
+            brace_depth = max(0, brace_depth - 1)
+        elif ch == '[':
+            bracket_depth += 1
+        elif ch == ']':
+            bracket_depth = max(0, bracket_depth - 1)
+        elif ch == '(':
+            paren_depth += 1
+        elif ch == ')':
+            paren_depth = max(0, paren_depth - 1)
+
+        if ch == ',' and brace_depth == 0 and bracket_depth == 0 and paren_depth == 0:
+            part = ''.join(chunk).strip()
+            if part:
+                parts.append(part)
+            chunk = []
+            continue
+
+        chunk.append(ch)
+
+    part = ''.join(chunk).strip()
+    if part:
+        parts.append(part)
+
+    return parts
+
+def parse_axis_options(opts: str) -> list[tuple[str, str | None]]:
+    text = opts.strip()
+    if not (text.startswith('[') and text.endswith(']')):
+        return []
+
+    body = text[1:-1].strip()
+    if not body:
+        return []
+
+    entries = []
+    for part in split_top_level_options(body):
+        if '=' in part:
+            key, value = part.split('=', 1)
+            entries.append((key.strip(), value.strip()))
+        else:
+            entries.append((part.strip(), None))
+    return entries
+
+def render_axis_options(entries: list[tuple[str, str | None]]) -> str:
+    pieces = []
+    for key, value in entries:
+        if value is None:
+            pieces.append(key)
+        else:
+            pieces.append(f'{key}={value}')
+    return '[' + ','.join(pieces) + ']'
+
+def remove_option(entries: list[tuple[str, str | None]], key: str) -> list[tuple[str, str | None]]:
+    return [(k, v) for k, v in entries if k != key]
+
+def set_option(entries: list[tuple[str, str | None]], key: str, value: str | None) -> list[tuple[str, str | None]]:
+    updated = []
+    replaced = False
+    for k, v in entries:
+        if k == key:
+            if not replaced:
+                updated.append((key, value))
+                replaced = True
+            continue
+        updated.append((k, v))
+
+    if not replaced:
+        updated.insert(0, (key, value))
+    return updated
+
+def has_right_y_axis(opts: str) -> bool:
+    return bool(re.search(r'axis\s+y\s+line\*?\s*=\s*right|yticklabel\s+pos\s*=\s*right|ylabel\s+near\s+ticks\s*=\s*right', opts))
+
+def latex_size_to_font_scale(size: str) -> float:
+    name = size.strip().lstrip('\\')
+    if not name:
+        return 0.7
+
+    by_name = {
+        'tiny': 0.55,
+        'scriptsize': 0.70,
+        'footnotesize': 0.80,
+        'small': 0.90,
+        'normalsize': 1.00,
+        'large': 1.10,
+        'Large': 1.20,
+        'LARGE': 1.30,
+        'huge': 1.40,
+        'Huge': 1.50,
+    }
+
+    if name in by_name:
+        return by_name[name]
+
+    lowered = name.lower()
+    lower_map = {
+        'tiny': 0.55,
+        'scriptsize': 0.70,
+        'footnotesize': 0.80,
+        'small': 0.90,
+        'normalsize': 1.00,
+        'large': 1.10,
+        'huge': 1.40,
+    }
+    return lower_map.get(lowered, 0.70)
+
+def latex_size_to_font(size: str) -> str:
+    name = size.strip().lstrip('\\')
+    return f'\\{name or "scriptsize"}'
+
+def set_style_font(entries: list[tuple[str, str | None]], key: str, font: str) -> list[tuple[str, str | None]]:
+    style_value = None
+    for k, v in entries:
+        if k == key:
+            style_value = v
+            break
+
+    parts = []
+    if style_value:
+        style_text = style_value.strip()
+        if style_text.startswith('{') and style_text.endswith('}'):
+            style_text = style_text[1:-1]
+        parts = split_top_level_options(style_text) if style_text else []
+
+    parts = [p for p in parts if not p.strip().startswith('font=')]
+    parts.append(f'font={font}')
+    return set_option(entries, key, '{' + ','.join(parts) + '}')
+
+def tikz_apply_yaxis_text_size(code: str, y_axis_text_size: str) -> str:
+    font = latex_size_to_font(y_axis_text_size)
 
     def repl(m):
-        nonlocal count
         begin, opts = m.groups()
-        count += 1
+        entries = parse_axis_options(opts)
+        entries = set_style_font(entries, 'yticklabel style', font)
+        entries = set_style_font(entries, 'ylabel style', font)
+        return begin + render_axis_options(entries)
+
+    axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
+    return axis_begin_re.sub(repl, code)
+
+def tikz_move_ylabels_to_top(code: str) -> str:
+    def repl(m):
+        begin, opts = m.groups()
+        entries = parse_axis_options(opts)
 
         # Keep default behavior for axes without explicit ylabel.
-        if not re.search(r'ylabel\s*=', opts):
+        has_ylabel = any(k == 'ylabel' and v for k, v in entries)
+        if not has_ylabel:
             return m.group(0)
 
         # Place left-axis label near top-left and right-axis label near top-right.
-        if count == 1:
-            style = 'at={(rel axis cs:0,1)},anchor=south west,rotate=-90,yshift=2pt'
-        else:
+        if has_right_y_axis(opts):
             style = 'at={(rel axis cs:1,1)},anchor=south east,rotate=-90,yshift=2pt'
-
-        style_re = re.compile(r'ylabel\s+style\s*=\s*\{.*?\}', re.DOTALL)
-        if style_re.search(opts):
-            opts = style_re.sub(f'ylabel style={{{style}}}', opts, count=1)
         else:
-            opts = re.sub(r'\]\s*$', f',ylabel style={{{style}}}]', opts, count=1)
+            style = 'at={(rel axis cs:0,1)},anchor=south west,rotate=-90,yshift=2pt'
 
-        return begin + opts
+        entries = set_option(entries, 'ylabel style', '{' + style + '}')
+        return begin + render_axis_options(entries)
 
     axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
     return axis_begin_re.sub(repl, code)
@@ -126,110 +283,37 @@ def tikz_fix_overlapping_x_ticks(code: str) -> str:
 def fix_twin_axis_layout(
     code: str,
     axis_width: str,
-    right_y_labels: list[str],
+    right_y_tick_labels: list[str],
+    right_y_axis_label: str = '',
+    y_labels_to_top: bool = True,
+    y_axis_font_scale: float = 0.7,
     tick_length_pt: float = 2.5,
     inner_sep_pt: float = 0.5,
 ) -> str:
     main_name = "mainaxis"
-    right_padding_em = compute_padding_em(right_y_labels, tick_length_pt, inner_sep_pt)
+    right_padding_em = compute_padding_em(
+        right_y_tick_labels,
+        right_y_axis_label=right_y_axis_label,
+        include_y_axis_label=not y_labels_to_top,
+        tick_font_scale=y_axis_font_scale,
+        y_axis_label_font_scale=y_axis_font_scale,
+        tick_length_pt=tick_length_pt,
+        inner_sep_pt=inner_sep_pt,
+    )
     effective_width = f"{{{axis_width} - {right_padding_em:.2f}em}}"
-
-    def split_top_level_options(s: str) -> list[str]:
-        parts = []
-        chunk = []
-        brace_depth = 0
-        bracket_depth = 0
-        paren_depth = 0
-
-        for ch in s:
-            if ch == '{':
-                brace_depth += 1
-            elif ch == '}':
-                brace_depth = max(0, brace_depth - 1)
-            elif ch == '[':
-                bracket_depth += 1
-            elif ch == ']':
-                bracket_depth = max(0, bracket_depth - 1)
-            elif ch == '(':
-                paren_depth += 1
-            elif ch == ')':
-                paren_depth = max(0, paren_depth - 1)
-
-            if ch == ',' and brace_depth == 0 and bracket_depth == 0 and paren_depth == 0:
-                part = ''.join(chunk).strip()
-                if part:
-                    parts.append(part)
-                chunk = []
-                continue
-
-            chunk.append(ch)
-
-        part = ''.join(chunk).strip()
-        if part:
-            parts.append(part)
-
-        return parts
-
-    def parse_options(opts: str) -> list[tuple[str, str | None]]:
-        text = opts.strip()
-        if not (text.startswith('[') and text.endswith(']')):
-            return []
-
-        body = text[1:-1].strip()
-        if not body:
-            return []
-
-        entries = []
-        for part in split_top_level_options(body):
-            if '=' in part:
-                key, value = part.split('=', 1)
-                entries.append((key.strip(), value.strip()))
-            else:
-                entries.append((part.strip(), None))
-        return entries
-
-    def render_options(entries: list[tuple[str, str | None]]) -> str:
-        pieces = []
-        for key, value in entries:
-            if value is None:
-                pieces.append(key)
-            else:
-                pieces.append(f'{key}={value}')
-        return '[' + ','.join(pieces) + ']'
-
-    def remove_key(entries: list[tuple[str, str | None]], key: str) -> list[tuple[str, str | None]]:
-        return [(k, v) for k, v in entries if k != key]
-
-    def set_key(entries: list[tuple[str, str | None]], key: str, value: str | None) -> list[tuple[str, str | None]]:
-        updated = []
-        replaced = False
-        for k, v in entries:
-            if k == key:
-                if not replaced:
-                    updated.append((key, value))
-                    replaced = True
-                continue
-            updated.append((k, v))
-
-        if not replaced:
-            updated.insert(0, (key, value))
-        return updated
-
-    def has_right_y_axis(opts: str) -> bool:
-        return bool(re.search(r'axis\s+y\s+line\*?\s*=\s*right|yticklabel\s+pos\s*=\s*right|ylabel\s+near\s+ticks\s*=\s*right', opts))
 
     def repl(m):
         begin, opts = m.groups()
-        entries = parse_options(opts)
+        entries = parse_axis_options(opts)
 
         # Normalize width on both axes and remove any existing scale-only marker for re-adding on primary.
-        entries = remove_key(entries, 'scale only axis')
-        entries = set_key(entries, 'width', effective_width)
+        entries = remove_option(entries, 'scale only axis')
+        entries = set_option(entries, 'width', effective_width)
 
         if has_right_y_axis(opts):
             # Tie right axis to left axis rectangle and hide duplicate x-axis visuals.
             for key in ('at', 'anchor', 'axis x line', 'xtick', 'xticklabels', 'overlay'):
-                entries = remove_key(entries, key)
+                entries = remove_option(entries, key)
 
             injection = [
                 ('at', f'{{({main_name}.south west)}}'),
@@ -240,41 +324,73 @@ def fix_twin_axis_layout(
                 ('xticklabels', r'\empty'),
             ]
 
-            opts = render_options(injection + entries)
+            opts = render_axis_options(injection + entries)
             return begin + opts
 
         # Left axis becomes anchor axis regardless of export order.
-        entries = set_key(entries, 'name', main_name)
-        opts = render_options(entries)
+        entries = set_option(entries, 'name', main_name)
+        opts = render_axis_options(entries)
         return begin + opts
 
     axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
     return axis_begin_re.sub(repl, code)
 
 def compute_padding_em(
-    labels: list[str],
+    tick_labels: list[str],
+    right_y_axis_label: str = '',
+    include_y_axis_label: bool = False,
+    tick_font_scale: float = 0.7,
+    y_axis_label_font_scale: float = 0.7,
     tick_length_pt: float = 2.5,
     inner_sep_pt: float = 0.5,
-    safety_em: float = 0.5,
 ) -> float:
     '''
     Compute total right-axis padding in em.
     '''
-    if not labels:
-        return tick_length_pt * 0.1 + inner_sep_pt * 0.1 + safety_em
+    max_tick_width = 0.0
+    if tick_labels:
+        max_tick_width = max([estimate_label_width_em(lbl, font_scale=tick_font_scale) for lbl in tick_labels if lbl])
 
-    max_label = max(labels, key=len)
-    max_label_width = estimate_label_width_em(max_label)
+    # A rotated side ylabel mostly contributes by glyph height, not string length.
+    y_axis_label_side_em = 0.0
+    if include_y_axis_label and right_y_axis_label:
+        y_axis_label_side_em = 0.65 * y_axis_label_font_scale
 
-    PT_TO_EM = 0.1  # Approximately 1em = 10pt
+    PT_TO_EM = 1.0/12.0  # Approximately 1em = 12pt
     tick_length_em = tick_length_pt * PT_TO_EM
-    inner_sep_em = inner_sep_pt * PT_TO_EM
 
-    return max_label_width + tick_length_em + inner_sep_em + safety_em
+    inner_sep_em = 0.0
+    if include_y_axis_label and right_y_axis_label:
+        inner_sep_em = inner_sep_pt * PT_TO_EM
+
+    # Keep padding tight: measured tick width + geometric extras + small safety buffer.
+    return max_tick_width + y_axis_label_side_em + tick_length_em + inner_sep_em
 
 def estimate_label_width_em(label: str, font_scale: float = 0.7) -> float:
     '''
-    Characters are approximately 0.55em at normalsize.
-    Assuming a scaling factor of 0.7 for scriptsize.
+    Estimate label width from weighted character classes.
+
+    Digits and punctuation are narrower than letters in typical TeX fonts,
+    so weighted widths avoid systematic overestimation (and excessive padding).
     '''
-    return len(label) * 0.55 * font_scale
+    if not label:
+        return 0.0
+
+    width_em = 0.0
+    for ch in label:
+        if ch.isdigit():
+            width_em += 0.48
+        elif ch in '.:,;':
+            width_em += 0.22
+        elif ch in '+-=':
+            width_em += 0.30
+        elif ch in '()[]{}':
+            width_em += 0.32
+        elif ch.isspace():
+            width_em += 0.25
+        elif ch.isalpha():
+            width_em += 0.50
+        else:
+            width_em += 0.45
+
+    return width_em * font_scale

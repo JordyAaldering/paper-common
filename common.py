@@ -21,7 +21,6 @@ class Colors(Enum):
 def as_tikz(fig, ax, ax2=None,
             axis_width: str = r'\linewidth',
             axis_height: str = r'.8\linewidth',
-            y_labels_to_top: bool = True,
             y_axis_text_size: str = 'scriptsize',
             **kwargs
         ) -> str:
@@ -37,19 +36,14 @@ def as_tikz(fig, ax, ax2=None,
             **kwargs)
 
     code = tikz_sanitize_labels(code)
-    if y_labels_to_top:
-        code = tikz_move_ylabels_to_top(code)
     if ax2 is not None:
         code = tikz_fix_overlapping_x_ticks(code)
         right_y_tick_labels = get_y_labels(ax2)
-        right_y_axis_label = ax2.get_ylabel()
         y_axis_font_scale = latex_size_to_font_scale(y_axis_text_size)
         code = fix_twin_axis_layout(
             code,
             axis_width,
             right_y_tick_labels,
-            right_y_axis_label=right_y_axis_label,
-            y_labels_to_top=y_labels_to_top,
             y_axis_font_scale=y_axis_font_scale,
         )
 
@@ -234,28 +228,6 @@ def tikz_apply_yaxis_text_size(code: str, y_axis_text_size: str) -> str:
     axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
     return axis_begin_re.sub(repl, code)
 
-def tikz_move_ylabels_to_top(code: str) -> str:
-    def repl(m):
-        begin, opts = m.groups()
-        entries = parse_axis_options(opts)
-
-        # Keep default behavior for axes without explicit ylabel.
-        has_ylabel = any(k == 'ylabel' and v for k, v in entries)
-        if not has_ylabel:
-            return m.group(0)
-
-        # Place left-axis label near top-left and right-axis label near top-right.
-        if has_right_y_axis(opts):
-            style = 'at={(rel axis cs:1,1)},anchor=south east,rotate=-90,yshift=2pt'
-        else:
-            style = 'at={(rel axis cs:0,1)},anchor=south west,rotate=-90,yshift=2pt'
-
-        entries = set_option(entries, 'ylabel style', '{' + style + '}')
-        return begin + render_axis_options(entries)
-
-    axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
-    return axis_begin_re.sub(repl, code)
-
 def tikz_fix_overlapping_x_ticks(code: str) -> str:
     '''
     With twin axis plots, `xtick` and `xticklabels` is being set for both axes, causing overlapping ticks.
@@ -284,8 +256,6 @@ def fix_twin_axis_layout(
     code: str,
     axis_width: str,
     right_y_tick_labels: list[str],
-    right_y_axis_label: str = '',
-    y_labels_to_top: bool = True,
     y_axis_font_scale: float = 0.7,
     tick_length_pt: float = 2.5,
     inner_sep_pt: float = 0.5,
@@ -293,8 +263,6 @@ def fix_twin_axis_layout(
     main_name = "mainaxis"
     right_padding_em = compute_padding_em(
         right_y_tick_labels,
-        right_y_axis_label=right_y_axis_label,
-        include_y_axis_label=not y_labels_to_top,
         tick_font_scale=y_axis_font_scale,
         y_axis_label_font_scale=y_axis_font_scale,
         tick_length_pt=tick_length_pt,
@@ -306,7 +274,7 @@ def fix_twin_axis_layout(
         begin, opts = m.groups()
         entries = parse_axis_options(opts)
 
-        # Normalize width on both axes and remove any existing scale-only marker for re-adding on primary.
+        # Normalize width on both axes and remove any existing scale-only marker.
         entries = remove_option(entries, 'scale only axis')
         entries = set_option(entries, 'width', effective_width)
 
@@ -337,8 +305,6 @@ def fix_twin_axis_layout(
 
 def compute_padding_em(
     tick_labels: list[str],
-    right_y_axis_label: str = '',
-    include_y_axis_label: bool = False,
     tick_font_scale: float = 0.7,
     y_axis_label_font_scale: float = 0.7,
     tick_length_pt: float = 2.5,
@@ -353,15 +319,11 @@ def compute_padding_em(
 
     # A rotated side ylabel mostly contributes by glyph height, not string length.
     y_axis_label_side_em = 0.0
-    if include_y_axis_label and right_y_axis_label:
-        y_axis_label_side_em = 0.65 * y_axis_label_font_scale
+    y_axis_label_side_em = 0.65 * y_axis_label_font_scale
 
     PT_TO_EM = 1.0/12.0  # Approximately 1em = 12pt
     tick_length_em = tick_length_pt * PT_TO_EM
-
-    inner_sep_em = 0.0
-    if include_y_axis_label and right_y_axis_label:
-        inner_sep_em = inner_sep_pt * PT_TO_EM
+    inner_sep_em = inner_sep_pt * PT_TO_EM
 
     # Keep padding tight: measured tick width + geometric extras + small safety buffer.
     return max_tick_width + y_axis_label_side_em + tick_length_em + inner_sep_em

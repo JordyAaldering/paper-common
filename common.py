@@ -1,5 +1,6 @@
 from enum import Enum
 import matplot2tikz
+import matplotlib.ticker as mticker
 import re
 
 class Colors(Enum):
@@ -17,14 +18,26 @@ class Colors(Enum):
     TETRADIC_2 = '#A63AA0'
     TETRADIC_3 = '#A6763A'
 
-def as_tikz(fig, ax, ax2=None, axis_width: str = r'\linewidth', axis_height: str = r'.8\linewidth', **kwargs) -> str:
+def as_tikz(fig, ax, ax2=None,
+            axis_width: str = r'\linewidth',
+            axis_height: str = r'.8\linewidth',
+            y_labels_to_top: bool = True,
+            **kwargs
+        ) -> str:
+
+    # Ensures ticks/formatters/etc. are resolved
+    fig.canvas.draw()
+
     # https://github.com/ErwindeGelder/matplot2tikz/blob/main/src/matplot2tikz/_save.py#L68
     s = matplot2tikz.get_tikz_code(fig,
             axis_width=axis_width,
             axis_height=axis_height,
             include_disclaimer=False,
             **kwargs)
+
     s = tikz_sanitize_labels(s)
+    if y_labels_to_top:
+        s = tikz_move_ylabels_to_top(s)
     if ax2 is not None:
         s = tikz_fix_overlapping_x_ticks(s)
         right_y_labels = get_y_labels(ax2)
@@ -32,7 +45,6 @@ def as_tikz(fig, ax, ax2=None, axis_width: str = r'\linewidth', axis_height: str
     return s
 
 def get_y_labels(ax):
-    ax.figure.canvas.draw()  # Ensures ticks/formatters are resolved
     return [t.get_text() for t in ax.get_yticklabels()]
 
 def tikz_sanitize_labels(s: str) -> str:
@@ -53,7 +65,36 @@ def sanitize(s: str) -> str:
     s = re.sub(r'_+', '_', s)  # Collapse multiple underscores
     return s.strip('_')  # Avoid leading/trailing underscores
 
-def tikz_fix_overlapping_x_ticks(s: str) -> (bool, str):
+def tikz_move_ylabels_to_top(tikz: str) -> str:
+    count = 0
+
+    def repl(m):
+        nonlocal count
+        begin, opts = m.groups()
+        count += 1
+
+        # Keep default behavior for axes without explicit ylabel.
+        if not re.search(r'ylabel\s*=', opts):
+            return m.group(0)
+
+        # Place left-axis label near top-left and right-axis label near top-right.
+        if count == 1:
+            style = 'at={(rel axis cs:0,1)},anchor=south west,rotate=-90,yshift=2pt'
+        else:
+            style = 'at={(rel axis cs:1,1)},anchor=south east,rotate=-90,yshift=2pt'
+
+        style_re = re.compile(r'ylabel\s+style\s*=\s*\{.*?\}', re.DOTALL)
+        if style_re.search(opts):
+            opts = style_re.sub(f'ylabel style={{{style}}}', opts, count=1)
+        else:
+            opts = re.sub(r'\]\s*$', f',ylabel style={{{style}}}]', opts, count=1)
+
+        return begin + opts
+
+    axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
+    return axis_begin_re.sub(repl, tikz)
+
+def tikz_fix_overlapping_x_ticks(s: str) -> str:
     '''
     With twin axis plots, `xtick` and `xticklabels` is being set for both axes, causing overlapping ticks.
     Replace ticks and labels of all but the first axis with empty ones to fix this issue.
@@ -134,7 +175,7 @@ def fix_twin_axis_layout(
     return axis_begin_re.sub(repl, tikz)
 
 def compute_padding_em(
-    labels: [str],
+    labels: list[str],
     tick_length_pt: float = 2.5,
     inner_sep_pt: float = 0.5,
     safety_em: float = 0.5,

@@ -22,7 +22,6 @@ def as_tikz(fig, ax, ax2=None,
             axis_width: str = r'\linewidth',
             axis_height: str = r'.8\linewidth',
             y_axis_text_size: str = 'scriptsize',
-            extra_axis_parameters = dict(),
             **kwargs
         ) -> str:
 
@@ -34,7 +33,6 @@ def as_tikz(fig, ax, ax2=None,
             axis_width=axis_width,
             axis_height=axis_height,
             include_disclaimer=False,
-            extra_axis_parameters=extra_axis_parameters,
             **kwargs)
 
     code = tikz_sanitize_labels(code)

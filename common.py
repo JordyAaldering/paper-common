@@ -62,8 +62,8 @@ def tikz_sanitize_labels(code: str) -> str:
     '''
     Sanitize references in `label` and `addlegendimage` by replacing invalid characters.
     '''
-    label_re = re.compile(r'\\label\{([^}]*)\}')
-    # Match refstyle value: allow balanced `{}` pairs (e.g. `\si{\giga\byte\per\second}`), stop at unbalanced `}` or `,``
+    # Match label content: allow balanced `{}` pairs (e.g. `\si{\giga\byte}`), stop at unbalanced `}`
+    label_re = re.compile(r'\\label\{((?:[^{}]|\{[^}]*\})*)\}')
     legend_re = re.compile(r'(\\addlegendimage\{.*?/pgfplots/refstyle=)((?:[^,{}]|\{[^}]*\})+)', re.DOTALL)
     code = label_re.sub(lambda m: f"\\label{{{sanitize(m.group(1))}}}", code)
     code = legend_re.sub(lambda m: f"{m.group(1)}{sanitize(m.group(2))}", code)

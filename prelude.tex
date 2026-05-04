@@ -5,8 +5,10 @@
 \pgfplotsset{
   compat=newest,
   % Optional semantic plot styles you can reuse in your own \addplot options.
-  common/line/.style={},
-  common/bar/.style={},
+  common/twin-main/.style={
+    name=mainaxis,
+    width={\dimexpr \linewidth - \yaxispadding\relax},
+  },
   common/twin/.style={
     at={(mainaxis.south west)},
     anchor=south west,
@@ -14,10 +16,6 @@
     axis x line=none,
     xtick=\empty,
     xticklabels=\empty,
-    width={\dimexpr \linewidth - \yaxispadding\relax},
-  },
-  common/twin-main/.style={
-    name=mainaxis,
     width={\dimexpr \linewidth - \yaxispadding\relax},
   },
   % Default font sizes (override these in your document if needed).

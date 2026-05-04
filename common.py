@@ -1,7 +1,17 @@
 from enum import Enum
 from pathlib import Path
+import hashlib
 import matplot2tikz
 import re
+from uuid import uuid4
+
+# Manual right-axis padding:
+# Declare once in preamble:
+#   \newlength{\yaxispadding}
+#   \setlength{\yaxispadding}{0.0em}
+# Set before each exported TikZ figure is input, e.g.:
+#   \setlength{\yaxispadding}{2.0em}
+#   \input{path/to/figure.tikz}
 
 class Colors(Enum):
     GREEN = '#3AA640'
@@ -19,9 +29,7 @@ class Colors(Enum):
     TETRADIC_3 = '#A6763A'
 
 def as_tikz(fig, ax, ax2=None,
-            axis_width: str = r'\linewidth',
-            axis_height: str = r'.8\linewidth',
-            y_axis_text_size: str = 'scriptsize',
+            axis_height_ratio: float = 0.8,
             **kwargs
         ) -> str:
 
@@ -30,24 +38,19 @@ def as_tikz(fig, ax, ax2=None,
 
     # https://github.com/ErwindeGelder/matplot2tikz/blob/main/src/matplot2tikz/_save.py#L68
     code = matplot2tikz.get_tikz_code(fig,
-            axis_width=axis_width,
-            axis_height=axis_height,
+            axis_width=r'\linewidth',
+            axis_height=f'{axis_height_ratio:g}\\linewidth',
             include_disclaimer=False,
             **kwargs)
 
+    # Namespace labels per exported figure to avoid multiply-defined labels across files.
     code = tikz_sanitize_labels(code)
     if ax2 is not None:
         code = tikz_fix_overlapping_x_ticks(code)
-        right_y_tick_labels = get_y_labels(ax2)
-        y_axis_font_scale = latex_size_to_font_scale(y_axis_text_size)
-        code = fix_twin_axis_layout(
-            code,
-            axis_width,
-            right_y_tick_labels,
-            y_axis_font_scale=y_axis_font_scale,
-        )
+        code = fix_twin_axis_layout(code)
 
-    code = tikz_apply_yaxis_text_size(code, y_axis_text_size)
+    # Reserve stable top label headroom with an invisible phantom at ymax.
+    code = tikz_add_phantom_top_y_label(code)
     return code
 
 def save_tikz(code: str, filepath: str):
@@ -55,27 +58,22 @@ def save_tikz(code: str, filepath: str):
     with filepath.open('w') as f:
         f.write(code)
 
-def get_y_labels(ax):
-    return [t.get_text() for t in ax.get_yticklabels()]
-
 def tikz_sanitize_labels(code: str) -> str:
     '''
     Sanitize references in `label` and `addlegendimage` by replacing invalid characters.
     '''
+    prefix = f'pc{uuid4().hex[:8]}'
+
+    def hashed_label(raw: str) -> str:
+        digest = hashlib.sha1(raw.encode('utf-8')).hexdigest()[:12]
+        return f'{prefix}:{digest}'
+
     # Match label content: allow balanced `{}` pairs (e.g. `\si{\giga\byte}`), stop at unbalanced `}`
     label_re = re.compile(r'\\label\{((?:[^{}]|\{[^}]*\})*)\}')
     legend_re = re.compile(r'(\\addlegendimage\{.*?/pgfplots/refstyle=)((?:[^,{}]|\{[^}]*\})+)', re.DOTALL)
-    code = label_re.sub(lambda m: f"\\label{{{sanitize(m.group(1))}}}", code)
-    code = legend_re.sub(lambda m: f"{m.group(1)}{sanitize(m.group(2))}", code)
+    code = label_re.sub(lambda m: f"\\label{{{hashed_label(m.group(1))}}}", code)
+    code = legend_re.sub(lambda m: f"{m.group(1)}{hashed_label(m.group(2))}", code)
     return code
-
-def sanitize(s: str) -> str:
-    '''
-    Replace invalid characters with underscores.
-    '''
-    s = re.sub(r'[^A-Za-z0-9_\-:]+', '_', s)
-    s = re.sub(r'_+', '_', s)  # Collapse multiple underscores
-    return s.strip('_')  # Avoid leading/trailing underscores
 
 def split_top_level_options(s: str) -> list[str]:
     parts = []
@@ -161,74 +159,6 @@ def set_option(entries: list[tuple[str, str | None]], key: str, value: str | Non
 def has_right_y_axis(opts: str) -> bool:
     return bool(re.search(r'axis\s+y\s+line\*?\s*=\s*right|yticklabel\s+pos\s*=\s*right|ylabel\s+near\s+ticks\s*=\s*right', opts))
 
-def latex_size_to_font_scale(size: str) -> float:
-    name = size.strip().lstrip('\\')
-    if not name:
-        return 0.7
-
-    by_name = {
-        'tiny': 0.55,
-        'scriptsize': 0.70,
-        'footnotesize': 0.80,
-        'small': 0.90,
-        'normalsize': 1.00,
-        'large': 1.10,
-        'Large': 1.20,
-        'LARGE': 1.30,
-        'huge': 1.40,
-        'Huge': 1.50,
-    }
-
-    if name in by_name:
-        return by_name[name]
-
-    lowered = name.lower()
-    lower_map = {
-        'tiny': 0.55,
-        'scriptsize': 0.70,
-        'footnotesize': 0.80,
-        'small': 0.90,
-        'normalsize': 1.00,
-        'large': 1.10,
-        'huge': 1.40,
-    }
-    return lower_map.get(lowered, 0.70)
-
-def latex_size_to_font(size: str) -> str:
-    name = size.strip().lstrip('\\')
-    return f'\\{name or "scriptsize"}'
-
-def set_style_font(entries: list[tuple[str, str | None]], key: str, font: str) -> list[tuple[str, str | None]]:
-    style_value = None
-    for k, v in entries:
-        if k == key:
-            style_value = v
-            break
-
-    parts = []
-    if style_value:
-        style_text = style_value.strip()
-        if style_text.startswith('{') and style_text.endswith('}'):
-            style_text = style_text[1:-1]
-        parts = split_top_level_options(style_text) if style_text else []
-
-    parts = [p for p in parts if not p.strip().startswith('font=')]
-    parts.append(f'font={font}')
-    return set_option(entries, key, '{' + ','.join(parts) + '}')
-
-def tikz_apply_yaxis_text_size(code: str, y_axis_text_size: str) -> str:
-    font = latex_size_to_font(y_axis_text_size)
-
-    def repl(m):
-        begin, opts = m.groups()
-        entries = parse_axis_options(opts)
-        entries = set_style_font(entries, 'yticklabel style', font)
-        entries = set_style_font(entries, 'ylabel style', font)
-        return begin + render_axis_options(entries)
-
-    axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
-    return axis_begin_re.sub(repl, code)
-
 def tikz_fix_overlapping_x_ticks(code: str) -> str:
     '''
     With twin axis plots, `xtick` and `xticklabels` is being set for both axes, causing overlapping ticks.
@@ -255,21 +185,9 @@ def tikz_fix_overlapping_x_ticks(code: str) -> str:
 
 def fix_twin_axis_layout(
     code: str,
-    axis_width: str,
-    right_y_tick_labels: list[str],
-    y_axis_font_scale: float = 0.7,
-    tick_length_pt: float = 2.5,
-    inner_sep_pt: float = 0.5,
 ) -> str:
     main_name = "mainaxis"
-    right_padding_em = compute_padding_em(
-        right_y_tick_labels,
-        tick_font_scale=y_axis_font_scale,
-        y_axis_label_font_scale=y_axis_font_scale,
-        tick_length_pt=tick_length_pt,
-        inner_sep_pt=inner_sep_pt,
-    )
-    effective_width = f"{{{axis_width} - {right_padding_em:.2f}em}}"
+    effective_width = r'{\dimexpr \linewidth - \yaxispadding\relax}'
 
     def repl(m):
         begin, opts = m.groups()
@@ -304,56 +222,17 @@ def fix_twin_axis_layout(
     axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
     return axis_begin_re.sub(repl, code)
 
-def compute_padding_em(
-    tick_labels: list[str],
-    tick_font_scale: float = 0.7,
-    y_axis_label_font_scale: float = 0.7,
-    tick_length_pt: float = 2.5,
-    inner_sep_pt: float = 0.5,
-) -> float:
-    '''
-    Compute total right-axis padding in em.
-    '''
-    max_tick_width = 0.0
-    if tick_labels:
-        max_tick_width = max([estimate_label_width_em(lbl, font_scale=tick_font_scale) for lbl in tick_labels if lbl])
+def tikz_add_phantom_top_y_label(code: str) -> str:
+    phantom_label = r'\vphantom{Ag}'
+    phantom_style = r'{yticklabel style={opacity=0,text opacity=0},major tick length=0pt}'
 
-    # A rotated side ylabel mostly contributes by glyph height, not string length.
-    y_axis_label_side_em = 0.0
-    y_axis_label_side_em = 0.65 * y_axis_label_font_scale
+    def repl(m):
+        begin, opts = m.groups()
+        entries = parse_axis_options(opts)
+        entries = set_option(entries, 'extra y ticks', r'{\pgfkeysvalueof{/pgfplots/ymax}}')
+        entries = set_option(entries, 'extra y tick labels', '{' + phantom_label + '}')
+        entries = set_option(entries, 'extra y tick style', phantom_style)
+        return begin + render_axis_options(entries)
 
-    PT_TO_EM = 1.0/12.0  # Approximately 1em = 12pt
-    tick_length_em = tick_length_pt * PT_TO_EM
-    inner_sep_em = inner_sep_pt * PT_TO_EM
-
-    # Keep padding tight: measured tick width + geometric extras + small safety buffer.
-    return max_tick_width + y_axis_label_side_em + tick_length_em + inner_sep_em
-
-def estimate_label_width_em(label: str, font_scale: float = 0.7) -> float:
-    '''
-    Estimate label width from weighted character classes.
-
-    Digits and punctuation are narrower than letters in typical TeX fonts,
-    so weighted widths avoid systematic overestimation (and excessive padding).
-    '''
-    if not label:
-        return 0.0
-
-    width_em = 0.0
-    for ch in label:
-        if ch.isdigit():
-            width_em += 0.48
-        elif ch in '.:,;':
-            width_em += 0.22
-        elif ch in '+-=':
-            width_em += 0.30
-        elif ch in '()[]{}':
-            width_em += 0.32
-        elif ch.isspace():
-            width_em += 0.25
-        elif ch.isalpha():
-            width_em += 0.50
-        else:
-            width_em += 0.45
-
-    return width_em * font_scale
+    axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
+    return axis_begin_re.sub(repl, code)

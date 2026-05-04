@@ -5,11 +5,19 @@
 \pgfplotsset{
   compat=newest,
   % Optional semantic plot styles you can reuse in your own \addplot options.
-  common/twin-main/.style={
-    name=mainaxis,
+  common/twin-shared/.style={
     width={\dimexpr \linewidth - \yaxispadding\relax},
+    label style={font=\scriptsize,inner sep=0pt},
+    tick label style={font=\scriptsize,inner sep=2pt},
+    legend style={font=\scriptsize},
+    major tick length=3pt,
+  },
+  common/twin-main/.style={
+    common/twin-shared,
+    name=mainaxis,
   },
   common/twin/.style={
+    common/twin-shared,
     at={(mainaxis.south west)},
     anchor=south west,
     overlay,
@@ -18,7 +26,6 @@
     xticklabels=\empty,
     ylabel style={font=\scriptsize},
     yticklabel style={font=\scriptsize},
-    width={\dimexpr \linewidth - \yaxispadding\relax},
   },
   % Default font sizes (override these in your document if needed).
   every axis/.append style={

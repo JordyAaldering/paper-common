@@ -182,16 +182,14 @@ def fix_twin_axis_layout(code: str) -> str:
             for key in ('at', 'anchor', 'axis x line', 'xtick', 'xticklabels', 'overlay', 'width'):
                 entries = remove_option(entries, key)
 
-            entries = remove_option(entries, 'common/twin')
-            entries.append(('common/twin', None))
+            entries = set_option(entries, 'common/twin', None)
             opts = render_axis_options(entries)
             return begin + opts
 
         # Left axis becomes anchor axis regardless of export order.
         entries = remove_option(entries, 'name')
         entries = remove_option(entries, 'width')
-        entries = remove_option(entries, 'common/twin-main')
-        entries.append(('common/twin-main', None))
+        entries = set_option(entries, 'common/twin-main', None)
         opts = render_axis_options(entries)
         return begin + opts
 

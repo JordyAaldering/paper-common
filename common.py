@@ -165,8 +165,19 @@ def tikz_fix_overlapping_x_ticks(code: str) -> str:
     axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
     return axis_begin_re.sub(repl, code)
 
+def detect_plot_type(code: str) -> str:
+    '''
+    Detect whether the axis contains bar plots or line plots.
+    Returns 'common/bar' if any bar plots are found, otherwise 'common/line'.
+    '''
+    if re.search(r'\\addplot\s*\[[^\]]*(?:ybar|xbar)', code):
+        return 'common/bar'
+    return 'common/line'
+
 def fix_twin_axis_layout(code: str) -> str:
     axis_index = 0
+    # Find all axes for plot type detection
+    axis_contents = re.findall(r'\\begin\{axis\}.*?\\end\{axis\}', code, re.DOTALL)
 
     def repl(m):
         nonlocal axis_index
@@ -176,6 +187,11 @@ def fix_twin_axis_layout(code: str) -> str:
 
         # Normalize width on both axes and remove any existing scale-only marker.
         entries = remove_option(entries, 'scale only axis')
+
+        # Detect plot type for this axis and append style
+        axis_content = axis_contents[axis_index - 1] if axis_index <= len(axis_contents) else ''
+        plot_style = detect_plot_type(axis_content)
+        entries = set_option(entries, plot_style, None)
 
         if axis_index > 1:
             # Tie right axis to left axis rectangle and hide duplicate x-axis visuals.

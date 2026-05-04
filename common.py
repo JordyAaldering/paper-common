@@ -20,10 +20,7 @@ class Colors(Enum):
     TETRADIC_2 = '#A63AA0'
     TETRADIC_3 = '#A6763A'
 
-def as_tikz(fig, ax, ax2=None,
-            axis_height_ratio: float = 0.8,
-            **kwargs
-        ) -> str:
+def as_tikz(fig, ax, ax2=None, axis_height_ratio: float = 0.8, **kwargs) -> str:
     # Ensures ticks/formatters/etc. are resolved
     fig.canvas.draw()
 
@@ -168,9 +165,7 @@ def tikz_fix_overlapping_x_ticks(code: str) -> str:
     axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
     return axis_begin_re.sub(repl, code)
 
-def fix_twin_axis_layout(
-    code: str,
-) -> str:
+def fix_twin_axis_layout(code: str) -> str:
     axis_index = 0
 
     def repl(m):
@@ -187,14 +182,16 @@ def fix_twin_axis_layout(
             for key in ('at', 'anchor', 'axis x line', 'xtick', 'xticklabels', 'overlay', 'width'):
                 entries = remove_option(entries, key)
 
-            entries = set_option(entries, 'common/twin', None)
+            entries = remove_option(entries, 'common/twin')
+            entries.append(('common/twin', None))
             opts = render_axis_options(entries)
             return begin + opts
 
         # Left axis becomes anchor axis regardless of export order.
         entries = remove_option(entries, 'name')
         entries = remove_option(entries, 'width')
-        entries = set_option(entries, 'common/twin-main', None)
+        entries = remove_option(entries, 'common/twin-main')
+        entries.append(('common/twin-main', None))
         opts = render_axis_options(entries)
         return begin + opts
 

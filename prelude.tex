@@ -16,15 +16,19 @@
     axis x line=none,
     xtick=\empty,
     xticklabels=\empty,
+    ylabel style={font=\scriptsize},
+    yticklabel style={font=\scriptsize},
     width={\dimexpr \linewidth - \yaxispadding\relax},
   },
   % Default font sizes (override these in your document if needed).
   every axis/.append style={
-    xlabel style={font=\scriptsize},
-    ylabel style={font=\scriptsize},
-    tick label style={font=\scriptsize},
+    label style={inner sep=2pt},
+    tick label style={font=\scriptsize,inner sep=2pt},
     legend style={font=\scriptsize},
+    major tick length=3pt,
   },
+  every axis y label/.append style={font=\scriptsize},
+  every axis y tick label/.append style={font=\scriptsize},
   % Stable top headroom via an invisible phantom y-tick label at ymax.
   every axis/.append style={
     extra y ticks={\pgfkeysvalueof{/pgfplots/ymax}},
@@ -37,4 +41,4 @@
 }
 % Can be overwritten for individual plots
 \newlength{\yaxispadding}
-\setlength{\yaxispadding}{0.0em}
+\setlength{\yaxispadding}{1.0em}

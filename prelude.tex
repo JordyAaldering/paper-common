@@ -26,6 +26,7 @@
     tick label style={font=\scriptsize,text=commonplottext,inner sep=2pt},
     legend style={font=\scriptsize,draw=commonplotgrid,fill opacity=0.8,draw opacity=1,text opacity=1},
     major tick length=3pt,
+    major tick style={draw=commonplotgrid},
     xtick style={color=commonplottick},
     ytick style={color=commonplottick},
   },
@@ -74,6 +75,6 @@
     extra y tick labels={\vphantom{Ag}},
     extra y tick style={yticklabel style={opacity=0,text opacity=0},major tick length=0pt},
   },
-  legend image code/.code={\draw[#1] (0pt,0pt) -- (1em,0pt);\path[#1,mark size=1.75*\pgfplotmarksize] plot coordinates {(0.5em,0pt)};},
+  legend image code/.code={\draw[#1] (0pt,0pt) -- (1em,0pt);\path[#1,mark size=1.5*\pgfplotmarksize] plot coordinates {(0.5em,0pt)};},
   ybar legend/.style={legend image code/.code={\draw[#1,draw=none] (0pt,-0.22em) rectangle (1em,0.22em);}},
 }

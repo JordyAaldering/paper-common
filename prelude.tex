@@ -1,16 +1,33 @@
 \usepackage{pgfplots}
 \usepgfplotslibrary{groupplots,dateplot}
 \usetikzlibrary{patterns,shapes.arrows}
-% Global plot styling
+
+\newlength{\yaxispadding}
+\setlength{\yaxispadding}{1.0em}
+
+% Vertical grid lines are disabled by default. To enable them for one figure:
+% write \commonplotxgridtrue immediately before \input, then
+% restore the default afterwards with \commonplotxgridfalse.
+\newif\ifcommonplotxgrid
+\commonplotxgridfalse
+
+\definecolor{commonplottext}{RGB}{38,38,38}
+\definecolor{commonplotgrid}{RGB}{204,204,204}
+\definecolor{commonplottick}{RGB}{192,192,192}
+
 \pgfplotsset{
   compat=newest,
-  % Optional semantic plot styles you can reuse in your own \addplot options.
   common/twin-shared/.style={
     width={\dimexpr \linewidth - \yaxispadding\relax},
-    label style={font=\scriptsize,inner sep=0pt},
-    tick label style={font=\scriptsize,inner sep=2pt},
-    legend style={font=\scriptsize},
+    axis line style={commonplotgrid},
+    x grid style={commonplotgrid},
+    y grid style={commonplotgrid},
+    label style={font=\scriptsize,text=commonplottext,inner sep=0pt},
+    tick label style={font=\scriptsize,text=commonplottext,inner sep=2pt},
+    legend style={font=\scriptsize,draw=commonplotgrid,fill opacity=0.8,draw opacity=1,text opacity=1},
     major tick length=3pt,
+    xtick style={color=commonplottick},
+    ytick style={color=commonplottick},
   },
   common/twin-main/.style={
     common/twin-shared,
@@ -22,30 +39,36 @@
     anchor=south west,
     overlay,
     axis x line=none,
+    xmajorgrids=false,
+    ymajorgrids=false,
     xtick=\empty,
     xticklabels=\empty,
     ylabel style={font=\scriptsize},
     yticklabel style={font=\scriptsize},
   },
-  % Default font sizes (override these in your document if needed).
   every axis/.append style={
-    label style={inner sep=2pt},
-    tick label style={font=\scriptsize,inner sep=2pt},
-    legend style={font=\scriptsize},
+    axis on top=false,
+    axis line style={commonplotgrid},
+    x grid style={commonplotgrid},
+    y grid style={commonplotgrid},
+    xmajorgrids=\ifcommonplotxgrid true\else false\fi,
+    ymajorgrids,
+    label style={font=\scriptsize,text=commonplottext,inner sep=2pt},
+    tick label style={font=\scriptsize,text=commonplottext,inner sep=2pt},
+    legend style={font=\scriptsize,draw=commonplotgrid,fill opacity=0.8,draw opacity=1,text opacity=1},
+    xtick style={color=commonplottick},
+    ytick style={color=commonplottick},
     major tick length=3pt,
   },
-  every axis y label/.append style={font=\scriptsize},
-  every axis y tick label/.append style={font=\scriptsize},
-  % Stable top headroom via an invisible phantom y-tick label at ymax.
+  every axis x label/.append style={font=\scriptsize,text=commonplottext},
+  every axis y label/.append style={font=\scriptsize,text=commonplottext},
+  every axis x tick label/.append style={font=\scriptsize,text=commonplottext},
+  every axis y tick label/.append style={font=\scriptsize,text=commonplottext},
   every axis/.append style={
     extra y ticks={\pgfkeysvalueof{/pgfplots/ymax}},
     extra y tick labels={\vphantom{Ag}},
     extra y tick style={yticklabel style={opacity=0,text opacity=0},major tick length=0pt},
   },
-  % Fixed legend symbol geometry for consistent line/bar legend appearance.
   legend image code/.code={\draw[#1] (0pt,0pt) -- (1em,0pt);\path[#1,mark size=1.75*\pgfplotmarksize] plot coordinates {(0.5em,0pt)};},
   ybar legend/.style={legend image code/.code={\draw[#1,draw=none] (0pt,-0.22em) rectangle (1em,0.22em);}},
 }
-% Can be overwritten for individual plots
-\newlength{\yaxispadding}
-\setlength{\yaxispadding}{1.0em}

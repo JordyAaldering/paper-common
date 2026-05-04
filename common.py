@@ -32,7 +32,6 @@ def as_tikz(fig, ax, ax2=None,
             axis_height_ratio: float = 0.8,
             **kwargs
         ) -> str:
-
     # Ensures ticks/formatters/etc. are resolved
     fig.canvas.draw()
 
@@ -156,9 +155,6 @@ def set_option(entries: list[tuple[str, str | None]], key: str, value: str | Non
         updated.insert(0, (key, value))
     return updated
 
-def has_right_y_axis(opts: str) -> bool:
-    return bool(re.search(r'axis\s+y\s+line\*?\s*=\s*right|yticklabel\s+pos\s*=\s*right|ylabel\s+near\s+ticks\s*=\s*right', opts))
-
 def tikz_fix_overlapping_x_ticks(code: str) -> str:
     '''
     With twin axis plots, `xtick` and `xticklabels` is being set for both axes, causing overlapping ticks.
@@ -188,16 +184,19 @@ def fix_twin_axis_layout(
 ) -> str:
     main_name = "mainaxis"
     effective_width = r'{\dimexpr \linewidth - \yaxispadding\relax}'
+    axis_index = 0
 
     def repl(m):
+        nonlocal axis_index
         begin, opts = m.groups()
         entries = parse_axis_options(opts)
+        axis_index += 1
 
         # Normalize width on both axes and remove any existing scale-only marker.
         entries = remove_option(entries, 'scale only axis')
         entries = set_option(entries, 'width', effective_width)
 
-        if has_right_y_axis(opts):
+        if axis_index > 1:
             # Tie right axis to left axis rectangle and hide duplicate x-axis visuals.
             for key in ('at', 'anchor', 'axis x line', 'xtick', 'xticklabels', 'overlay'):
                 entries = remove_option(entries, key)

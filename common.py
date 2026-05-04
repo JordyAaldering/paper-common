@@ -5,14 +5,6 @@ import matplot2tikz
 import re
 from uuid import uuid4
 
-# Manual right-axis padding:
-# Declare once in preamble:
-#   \newlength{\yaxispadding}
-#   \setlength{\yaxispadding}{0.0em}
-# Set before each exported TikZ figure is input, e.g.:
-#   \setlength{\yaxispadding}{2.0em}
-#   \input{path/to/figure.tikz}
-
 class Colors(Enum):
     GREEN = '#3AA640'
     LIGHT_GREEN = '#A8D47A'
@@ -44,13 +36,9 @@ def as_tikz(fig, ax, ax2=None,
 
     # Namespace labels per exported figure to avoid multiply-defined labels across files.
     code = tikz_sanitize_labels(code)
-    code = tikz_set_fixed_legend_symbols(code)
     if ax2 is not None:
         code = tikz_fix_overlapping_x_ticks(code)
         code = fix_twin_axis_layout(code)
-
-    # Reserve stable top label headroom with an invisible phantom at ymax.
-    code = tikz_add_phantom_top_y_label(code)
     return code
 
 def save_tikz(code: str, filepath: str):
@@ -183,8 +171,6 @@ def tikz_fix_overlapping_x_ticks(code: str) -> str:
 def fix_twin_axis_layout(
     code: str,
 ) -> str:
-    main_name = "mainaxis"
-    effective_width = r'{\dimexpr \linewidth - \yaxispadding\relax}'
     axis_index = 0
 
     def repl(m):
@@ -195,56 +181,22 @@ def fix_twin_axis_layout(
 
         # Normalize width on both axes and remove any existing scale-only marker.
         entries = remove_option(entries, 'scale only axis')
-        entries = set_option(entries, 'width', effective_width)
 
         if axis_index > 1:
             # Tie right axis to left axis rectangle and hide duplicate x-axis visuals.
-            for key in ('at', 'anchor', 'axis x line', 'xtick', 'xticklabels', 'overlay'):
+            for key in ('at', 'anchor', 'axis x line', 'xtick', 'xticklabels', 'overlay', 'width'):
                 entries = remove_option(entries, key)
 
-            injection = [
-                ('at', f'{{({main_name}.south west)}}'),
-                ('anchor', 'south west'),
-                ('overlay', None),
-                ('axis x line', 'none'),
-                ('xtick', r'\empty'),
-                ('xticklabels', r'\empty'),
-            ]
-
-            opts = render_axis_options(injection + entries)
+            entries = set_option(entries, 'common/twin', None)
+            opts = render_axis_options(entries)
             return begin + opts
 
         # Left axis becomes anchor axis regardless of export order.
-        entries = set_option(entries, 'name', main_name)
+        entries = remove_option(entries, 'name')
+        entries = remove_option(entries, 'width')
+        entries = set_option(entries, 'common/twin-main', None)
         opts = render_axis_options(entries)
         return begin + opts
-
-    axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
-    return axis_begin_re.sub(repl, code)
-
-def tikz_add_phantom_top_y_label(code: str) -> str:
-    phantom_label = r'\vphantom{Ag}'
-    phantom_style = r'{yticklabel style={opacity=0,text opacity=0},major tick length=0pt}'
-
-    def repl(m):
-        begin, opts = m.groups()
-        entries = parse_axis_options(opts)
-        entries = set_option(entries, 'extra y ticks', r'{\pgfkeysvalueof{/pgfplots/ymax}}')
-        entries = set_option(entries, 'extra y tick labels', '{' + phantom_label + '}')
-        entries = set_option(entries, 'extra y tick style', phantom_style)
-        return begin + render_axis_options(entries)
-
-    axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
-    return axis_begin_re.sub(repl, code)
-
-def tikz_set_fixed_legend_symbols(code: str) -> str:
-    def repl(m):
-        begin, opts = m.groups()
-        entries = parse_axis_options(opts)
-        # Keep legend symbol geometry consistent across figures.
-        entries = set_option(entries, 'legend image code/.code', '{\\draw[#1] (0pt,0pt) -- (1em,0pt);\\path[#1,mark size=1.75*\\pgfplotmarksize] plot coordinates {(0.5em,0pt)};}')
-        entries = set_option(entries, 'ybar legend/.style', '{legend image code/.code={\\draw[#1,draw=none] (0pt,-0.22em) rectangle (1em,0.22em);}}')
-        return begin + render_axis_options(entries)
 
     axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
     return axis_begin_re.sub(repl, code)

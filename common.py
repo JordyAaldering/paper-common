@@ -44,6 +44,7 @@ def as_tikz(fig, ax, ax2=None,
 
     # Namespace labels per exported figure to avoid multiply-defined labels across files.
     code = tikz_sanitize_labels(code)
+    code = tikz_set_fixed_legend_symbols(code)
     if ax2 is not None:
         code = tikz_fix_overlapping_x_ticks(code)
         code = fix_twin_axis_layout(code)
@@ -231,6 +232,18 @@ def tikz_add_phantom_top_y_label(code: str) -> str:
         entries = set_option(entries, 'extra y ticks', r'{\pgfkeysvalueof{/pgfplots/ymax}}')
         entries = set_option(entries, 'extra y tick labels', '{' + phantom_label + '}')
         entries = set_option(entries, 'extra y tick style', phantom_style)
+        return begin + render_axis_options(entries)
+
+    axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)
+    return axis_begin_re.sub(repl, code)
+
+def tikz_set_fixed_legend_symbols(code: str) -> str:
+    def repl(m):
+        begin, opts = m.groups()
+        entries = parse_axis_options(opts)
+        # Keep legend symbol geometry consistent across figures.
+        entries = set_option(entries, 'legend image code/.code', '{\\draw[#1] (0pt,0pt) -- (1em,0pt);\\path[#1,mark size=1.75*\\pgfplotmarksize] plot coordinates {(0.5em,0pt)};}')
+        entries = set_option(entries, 'ybar legend/.style', '{legend image code/.code={\\draw[#1,draw=none] (0pt,-0.22em) rectangle (1em,0.22em);}}')
         return begin + render_axis_options(entries)
 
     axis_begin_re = re.compile(r'(\\begin\{axis\})(\s*\[.*?\])', re.DOTALL)

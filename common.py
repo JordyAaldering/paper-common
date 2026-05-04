@@ -170,7 +170,7 @@ def detect_plot_type(code: str) -> str:
     Detect whether the axis contains bar plots or line plots.
     Returns 'common/bar' if any bar plots are found, otherwise 'common/line'.
     '''
-    if re.search(r'\\addplot\s*\[[^\]]*(?:ybar|xbar)', code):
+    if re.search(r'(?:ybar|xbar)', code):
         return 'common/bar'
     return 'common/line'
 
